@@ -35,6 +35,7 @@
     thead tr{background:#f9fafb}
     th{ text-align:left; vertical-align:top; white-space:normal; word-wrap:break-word }
     td.num{ text-align:right }
+    .status{font-size:12px;color:#475467;margin-top:8px}
   </style>
 </head>
 <body>
@@ -101,6 +102,9 @@
         <button id="btn-form-generate" onclick="generateFromSelections()">Generate Recipes from Selections</button>
         <button id="btn-form-clear" class="ghost" type="button" onclick="clearFormSelections()">Clear Form</button>
       </div>
+
+      <!-- Status line to prove clicks fire -->
+      <div id="status" class="status"></div>
 
       <!-- Nutrition table & coaching -->
       <div id="nutrition-root" class="card"></div>
@@ -209,6 +213,11 @@
       const content = acc.querySelector('.acc-content');
       const open = content.classList.toggle('open');
       header.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    function setStatus(msg){
+      const s = document.getElementById('status');
+      if (s) s.textContent = msg;
     }
 
     // =========================
@@ -360,10 +369,9 @@
     }
 
     // =========================
-    // PAGE INIT
+    // INIT (build UI and preview)
     // =========================
     (function init(){
-      // Include accordions
       const root = document.getElementById('include-root');
       Object.entries(STARTER_INGREDIENTS).forEach(([cat, items])=>{
         const acc = el('div', { class:'accordion' });
@@ -379,23 +387,21 @@
         root.appendChild(acc);
       });
 
-      // Exclude + goals
       renderChecks('exc-categories', EXCLUDE_CATEGORIES);
       renderChecks('goals', GOALS);
 
-      // Live preview on any checkbox change
       document.body.addEventListener('change', (e)=>{
         if(e.target.closest('.checks')){
-          const preview = document.getElementById('form-preview');
-          preview.textContent = buildPreviewText(collectForm());
+          document.getElementById('form-preview').textContent = buildPreviewText(collectForm());
         }
       });
     })();
 
     // =========================
-    // PUBLIC HANDLERS (onclick)
+    // PUBLIC HANDLERS (exported to window)
     // =========================
     async function generateFromCustom(){
+      setStatus(''); // keep status area for selections only
       const custom = document.getElementById('custom-input').value.trim();
       const num = parseInt(document.getElementById('num-recipes').value, 10);
       const count = Number.isFinite(num) ? num : undefined;
@@ -425,24 +431,16 @@ Request: ${custom || 'Chef’s choice within brain-healthy constraints.'}`;
       return { selections, exclusions, goals };
     }
 
-    function buildPreviewText(data){
-      const parts = [];
-      for (const [cat, list] of Object.entries(data.selections)) {
-        if (list && list.length) parts.push(`${cat}: ${list.join(', ')}`);
-      }
-      if (data.exclusions?.length) parts.push(`Exclude categories: ${data.exclusions.join(', ')}`);
-      if (data.goals?.length) parts.push(`Goals: ${data.goals.join(', ')}`);
-      return parts.length ? parts.join('\n') : 'No selections yet.';
-    }
-
     function clearFormSelections(){
       document.querySelectorAll('.checks input[type=checkbox]').forEach(i => { i.checked = false; });
       document.getElementById('form-preview').textContent = 'No selections yet.';
-      const nroot = document.getElementById('nutrition-root'); if (nroot) nroot.innerHTML = '';
+      document.getElementById('nutrition-root').innerHTML = '';
       const out = document.getElementById('form-output'); if (out) out.textContent = '';
+      setStatus('');
     }
 
     async function generateFromSelections(){
+      setStatus('Clicked — working…'); // proves the handler fires
       const out = document.getElementById('form-output') || document.createElement('pre');
       if (!out.id){ out.id='form-output'; out.className='card'; document.querySelector('main').appendChild(out); }
       out.textContent = 'Generating...';
@@ -480,12 +478,21 @@ ${goals}`;
             el('ul', {}, ...tips.map(t=>el('li', {}, t)))
           ));
         }
+        setStatus('Done.');
 
       } catch(err){
         out.textContent = 'Error during generation: ' + (err?.message || String(err));
+        setStatus('Error.');
         console.error(err);
       }
     }
+
+    // Expose handlers to inline onclick (some hosts disable implicit globals)
+    window.generateFromSelections = generateFromSelections;
+    window.generateFromCustom     = generateFromCustom;
+    window.clearFormSelections    = clearFormSelections;
+    window.clearCustomSection     = clearCustomSection;
+    window.toggleAccordion        = toggleAccordion;
   </script>
 </body>
 </html>
