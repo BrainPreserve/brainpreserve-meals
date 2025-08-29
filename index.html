@@ -52,8 +52,8 @@
         <input id="num-recipes" type="number" min="1" max="10" placeholder="3–5" />
       </div>
       <div class="btn-row">
-        <button id="btn-custom-generate">Generate Recipes</button>
-        <button id="btn-custom-clear" class="ghost" type="button">Clear Custom</button>
+        <button id="btn-custom-generate" onclick="generateFromCustom()">Generate Recipes</button>
+        <button id="btn-custom-clear" class="ghost" type="button" onclick="clearCustomSection()">Clear Custom</button>
       </div>
       <pre id="custom-output"></pre>
     </section>
@@ -71,7 +71,7 @@
 
         <div>
           <div class="accordion" id="exclude-accordion">
-            <div class="acc-header" role="button" tabindex="0" aria-expanded="false">
+            <div class="acc-header" role="button" tabindex="0" aria-expanded="false" onclick="toggleAccordion(this)">
               <h4>Exclude Categories</h4>
               <span class="muted">Click to expand</span>
             </div>
@@ -82,7 +82,7 @@
           </div>
 
           <div class="accordion" id="goals-accordion">
-            <div class="acc-header" role="button" tabindex="0" aria-expanded="false">
+            <div class="acc-header" role="button" tabindex="0" aria-expanded="false" onclick="toggleAccordion(this)">
               <h4>Nutrition Goals</h4>
               <span class="muted">Click to expand</span>
             </div>
@@ -98,8 +98,8 @@
       <pre id="form-preview">No selections yet.</pre>
 
       <div class="btn-row">
-        <button id="btn-form-generate">Generate Recipes from Selections</button>
-        <button id="btn-form-clear" class="ghost" type="button">Clear Form</button>
+        <button id="btn-form-generate" onclick="generateFromSelections()">Generate Recipes from Selections</button>
+        <button id="btn-form-clear" class="ghost" type="button" onclick="clearFormSelections()">Clear Form</button>
       </div>
 
       <!-- Nutrition table & coaching -->
@@ -174,7 +174,9 @@
       "Microbiome Support (Pre/Pro/Post-biotic)"
     ];
 
-    // -------- DOM helpers --------
+    // =========================
+    // HELPERS
+    // =========================
     function el(tag, attrs={}, ...children){
       const node = document.createElement(tag);
       Object.entries(attrs).forEach(([k,v])=>{
@@ -202,66 +204,16 @@
       return Array.from(document.querySelectorAll(`#${CSS.escape(containerId)} input[type=checkbox]:checked`))
         .map(i => i.value);
     }
-
-    // -------- Accordions & UI --------
-    function wireAccordion(acc){
-      const header = acc.querySelector('.acc-header'); const content = acc.querySelector('.acc-content');
-      if(!header || !content) return;
-      header.addEventListener('click', ()=>{
-        const open = content.classList.toggle('open');
-        header.setAttribute('aria-expanded', open ? 'true' : 'false');
-      });
-      header.addEventListener('keydown', (e)=>{
-        if(e.key==='Enter' || e.key===' '){ e.preventDefault(); header.click(); }
-      });
-    }
-    function renderIncludeAccordions(){
-      const root = document.getElementById('include-root');
-      root.innerHTML = '';
-      Object.entries(STARTER_INGREDIENTS).forEach(([cat, items])=>{
-        const acc = el('div', { class:'accordion' });
-        const header = el('div', { class:'acc-header', role:'button', tabindex:'0', 'aria-expanded':'false' },
-          el('h4', {}, cat),
-          el('span', { class:'muted' }, 'Click to expand')
-        );
-        const content = el('div', { class:'acc-content' });
-        const list = el('div', { class:'checks', id:`inc-${cat}` });
-        if(Array.isArray(items)){ items.forEach(val => list.appendChild(check(`inc-${cat}`, val))); }
-        content.appendChild(list);
-        acc.appendChild(header); acc.appendChild(content);
-        root.appendChild(acc); wireAccordion(acc);
-      });
+    function toggleAccordion(header){
+      const acc = header.parentElement;
+      const content = acc.querySelector('.acc-content');
+      const open = content.classList.toggle('open');
+      header.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
 
-    function collectForm(){
-      const selections = {};
-      Object.keys(STARTER_INGREDIENTS).forEach(cat => { selections[cat] = getSelected(`inc-${cat}`); });
-      const exclusions = getSelected('exc-categories');
-      const goals = getSelected('goals');
-      return { selections, exclusions, goals };
-    }
-    function buildPreviewText(data){
-      const parts = [];
-      for (const [cat, list] of Object.entries(data.selections)) {
-        if (list && list.length) parts.push(`${cat}: ${list.join(', ')}`);
-      }
-      if (data.exclusions?.length) parts.push(`Exclude categories: ${data.exclusions.join(', ')}`);
-      if (data.goals?.length) parts.push(`Goals: ${data.goals.join(', ')}`);
-      return parts.length ? parts.join('\n') : 'No selections yet.';
-    }
-    function clearFormSelections(){
-      document.querySelectorAll('.checks input[type=checkbox]').forEach(i => { i.checked = false; });
-      document.getElementById('form-preview').textContent = 'No selections yet.';
-      const nroot = document.getElementById('nutrition-root'); if (nroot) nroot.innerHTML = '';
-      const out = document.getElementById('form-output'); if (out) out.textContent = '';
-    }
-    function clearCustomSection(){
-      document.getElementById('custom-input').value = '';
-      document.getElementById('num-recipes').value = '';
-      document.getElementById('custom-output').textContent = '';
-    }
-
-    // -------- Serverless OpenAI call --------
+    // =========================
+    // OPENAI VIA NETLIFY FUNCTION
+    // =========================
     async function callOpenAI(messages){
       const resp = await fetch(CFG.generateEndpoint, {
         method: "POST",
@@ -273,7 +225,9 @@
       return data?.content || '';
     }
 
-    // -------- CSV loading & MERGE (multi-file) --------
+    // =========================
+    // CSV LOADING & MERGE
+    // =========================
     const DATA = { loaded:false, byKey:Object.create(null) };
 
     function norm(s){ return String(s||'').trim().toLowerCase(); }
@@ -358,7 +312,6 @@
         root.appendChild(el('p',{class:'muted'},'No nutrition data found for your selections.'));
         return;
       }
-
       const table = el('table', {});
       const thead = el('thead', {});
       const headerRow = el('tr', {},
@@ -406,42 +359,96 @@
       return tips;
     }
 
-    // -------- Wire up the page --------
-    document.addEventListener('DOMContentLoaded', ()=>{
-      renderIncludeAccordions();
+    // =========================
+    // PAGE INIT
+    // =========================
+    (function init(){
+      // Include accordions
+      const root = document.getElementById('include-root');
+      Object.entries(STARTER_INGREDIENTS).forEach(([cat, items])=>{
+        const acc = el('div', { class:'accordion' });
+        const header = el('div', { class:'acc-header', role:'button', tabindex:'0', 'aria-expanded':'false', onclick:'toggleAccordion(this)' },
+          el('h4', {}, cat),
+          el('span', { class:'muted' }, 'Click to expand')
+        );
+        const content = el('div', { class:'acc-content' });
+        const list = el('div', { class:'checks', id:`inc-${cat}` });
+        if(Array.isArray(items)){ items.forEach(val => list.appendChild(check(`inc-${cat}`, val))); }
+        content.appendChild(list);
+        acc.appendChild(header); acc.appendChild(content);
+        root.appendChild(acc);
+      });
+
+      // Exclude + goals
       renderChecks('exc-categories', EXCLUDE_CATEGORIES);
       renderChecks('goals', GOALS);
-      wireAccordion(document.getElementById('exclude-accordion'));
-      wireAccordion(document.getElementById('goals-accordion'));
 
-      const preview = document.getElementById('form-preview');
+      // Live preview on any checkbox change
       document.body.addEventListener('change', (e)=>{
-        if(e.target.closest('.checks')) preview.textContent = buildPreviewText(collectForm());
+        if(e.target.closest('.checks')){
+          const preview = document.getElementById('form-preview');
+          preview.textContent = buildPreviewText(collectForm());
+        }
       });
+    })();
 
-      // Custom request
-      document.getElementById('btn-custom-generate').addEventListener('click', async ()=>{
-        const custom = document.getElementById('custom-input').value.trim();
-        const num = parseInt(document.getElementById('num-recipes').value, 10);
-        const count = Number.isFinite(num) ? num : undefined;
-        const sys = `You are BrainPreserve’s recipe engine. Generate brain-healthy recipes with clear headings, MIND/Mediterranean alignment, minimized added sugars and ultra-processed foods, reasonable sodium, and a short coaching suggestions section tailored to the request.`;
-        const user = `${count ? `Generate ${count} recipes.` : 'Generate 3–5 recipes.'}
+    // =========================
+    // PUBLIC HANDLERS (onclick)
+    // =========================
+    async function generateFromCustom(){
+      const custom = document.getElementById('custom-input').value.trim();
+      const num = parseInt(document.getElementById('num-recipes').value, 10);
+      const count = Number.isFinite(num) ? num : undefined;
+      const sys = `You are BrainPreserve’s recipe engine. Generate brain-healthy recipes with clear headings, MIND/Mediterranean alignment, minimized added sugars and ultra-processed foods, reasonable sodium, and a short coaching suggestions section tailored to the request.`;
+      const user = `${count ? `Generate ${count} recipes.` : 'Generate 3–5 recipes.'}
 Request: ${custom || 'Chef’s choice within brain-healthy constraints.'}`;
 
-        const out = document.getElementById('custom-output');
-        out.textContent = 'Generating...';
-        try{
-          const text = await callOpenAI([{ role:'system', content: sys }, { role:'user', content: user }]);
-          out.textContent = text || '(no text)';
-        }catch(err){ out.textContent = 'Error: ' + err.message; }
-      });
+      const out = document.getElementById('custom-output');
+      out.textContent = 'Generating...';
+      try{
+        const text = await callOpenAI([{ role:'system', content: sys }, { role:'user', content: user }]);
+        out.textContent = text || '(no text)';
+      }catch(err){ out.textContent = 'Error: ' + err.message; }
+    }
 
-      document.getElementById('btn-custom-clear').addEventListener('click', clearCustomSection);
+    function clearCustomSection(){
+      document.getElementById('custom-input').value = '';
+      document.getElementById('num-recipes').value = '';
+      document.getElementById('custom-output').textContent = '';
+    }
 
-      // Form flow
-      document.getElementById('btn-form-generate').addEventListener('click', async ()=>{
+    function collectForm(){
+      const selections = {};
+      Object.keys(STARTER_INGREDIENTS).forEach(cat => { selections[cat] = getSelected(`inc-${cat}`); });
+      const exclusions = getSelected('exc-categories');
+      const goals = getSelected('goals');
+      return { selections, exclusions, goals };
+    }
+
+    function buildPreviewText(data){
+      const parts = [];
+      for (const [cat, list] of Object.entries(data.selections)) {
+        if (list && list.length) parts.push(`${cat}: ${list.join(', ')}`);
+      }
+      if (data.exclusions?.length) parts.push(`Exclude categories: ${data.exclusions.join(', ')}`);
+      if (data.goals?.length) parts.push(`Goals: ${data.goals.join(', ')}`);
+      return parts.length ? parts.join('\n') : 'No selections yet.';
+    }
+
+    function clearFormSelections(){
+      document.querySelectorAll('.checks input[type=checkbox]').forEach(i => { i.checked = false; });
+      document.getElementById('form-preview').textContent = 'No selections yet.';
+      const nroot = document.getElementById('nutrition-root'); if (nroot) nroot.innerHTML = '';
+      const out = document.getElementById('form-output'); if (out) out.textContent = '';
+    }
+
+    async function generateFromSelections(){
+      const out = document.getElementById('form-output') || document.createElement('pre');
+      if (!out.id){ out.id='form-output'; out.className='card'; document.querySelector('main').appendChild(out); }
+      out.textContent = 'Generating...';
+
+      try {
         const form = collectForm();
-
         const selLines = Object.entries(form.selections)
           .filter(([, list]) => list && list.length)
           .map(([k, list]) => `${k}: ${list.join(', ')}`)
@@ -455,35 +462,30 @@ ${selLines || '(none)'}
 ${exc}
 ${goals}`;
 
-        const out = document.getElementById('form-output') || document.createElement('pre');
-        if (!out.id){ out.id='form-output'; out.className='card'; document.querySelector('main').appendChild(out); }
-        out.textContent = 'Generating...';
+        // 1) Get recipe text
+        const text = await callOpenAI([{ role:'system', content: sys }, { role:'user', content: user }]);
+        out.textContent = text || '(no text)';
 
-        try{
-          const text = await callOpenAI([{ role:'system', content: sys }, { role:'user', content: user }]);
-          out.textContent = text || '(no text)';
+        // 2) Nutrition & coaching
+        await ensureDataLoaded();
+        const picked = getSelectedIngredients(form);
+        const rows = getRowsFor(picked);
+        renderNutritionTable(rows);
 
-          await ensureDataLoaded();
-          const picked = getSelectedIngredients(form);
-          const rows = getRowsFor(picked);
-          renderNutritionTable(rows);
-
-          const tips = coachingFromGoals(form.goals || []);
-          if (tips.length){
-            const nroot = document.getElementById('nutrition-root');
-            nroot.appendChild(el('div', { class:'card', style:'margin-top:12px' },
-              el('h4', {}, 'Goal-Aligned Coaching (deterministic rules)'),
-              el('ul', {}, ...tips.map(t=>el('li', {}, t)))
-            ));
-          }
-
-        }catch(err){
-          out.textContent = 'Error: ' + err.message;
+        const tips = coachingFromGoals(form.goals || []);
+        const nroot = document.getElementById('nutrition-root');
+        if (tips.length){
+          nroot.appendChild(el('div', { class:'card', style:'margin-top:12px' },
+            el('h4', {}, 'Goal-Aligned Coaching (deterministic rules)'),
+            el('ul', {}, ...tips.map(t=>el('li', {}, t)))
+          ));
         }
-      });
 
-      document.getElementById('btn-form-clear').addEventListener('click', clearFormSelections);
-    });
+      } catch(err){
+        out.textContent = 'Error during generation: ' + (err?.message || String(err));
+        console.error(err);
+      }
+    }
   </script>
 </body>
 </html>
